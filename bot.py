@@ -152,8 +152,10 @@ async def on_message(message: discord.Message):
 
     # Ban at 3+ infractions
     if infractions >= 3:
-        try:# ---- BASIC COMMANDS ----
-@bot.command()
+        try: 
+            await guild.ban(message.author,reason="repeated infractions")
+            except Exception:
+                pass
 @commands.cooldown(1, 5, commands.BucketType.user)
 async def hello(ctx):
     """Simple test command with cooldown."""
@@ -215,3 +217,4 @@ async def ban_slash_error(interaction: discord.Interaction, error):
 
 # ---- RUN BOT ----
 bot.run(os.environ["DISCORD_BOT_TOKEN"])
+
