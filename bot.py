@@ -151,17 +151,17 @@ async def on_message(message: discord.Message):
             await log_channel.send(f"{message.author} was timed out (2 infractions).")
 
     # Ban at 3+ infractions
-    if infractions >= 3:
-        try: 
-            await guild.ban(message.author,reason="repeated infractions")
-            except Exception:
-                pass
-@commands.cooldown(1, 5, commands.BucketType.user)
-async def hello(ctx):
-    """Simple test command with cooldown."""
-    await ctx.send("Yo, Dollah is here!")
+    154    if infractions >= 3:
+        try:
+          await guild.ban(message.author, reason="Repeated infractions")
+        except Exception:
+            pass
 
-
+        await send_temp_msg(
+            message.channel,
+            f"{message.author.mention} has been banned for repeated infractions.",
+            delay=5,
+        )
 @bot.command(name="helpme")
 async def helpme(ctx):
     """Custom help command."""
@@ -217,4 +217,5 @@ async def ban_slash_error(interaction: discord.Interaction, error):
 
 # ---- RUN BOT ----
 bot.run(os.environ["DISCORD_BOT_TOKEN"])
+
 
