@@ -231,6 +231,3 @@ async def ban_slash(interaction, member: discord.Member, reason: str = "No reaso
 
 # ---- RUN BOT ----
 bot.run(os.environ["DISCORD_BOT_TOKEN"])
-
-
-
