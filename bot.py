@@ -14,10 +14,10 @@ intents.guilds = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # ---- DATA STORAGE ----
-user_infractions = {}      # {user_id: int}
-user_last_message = {}     # {user_id: (last_content, repeat_count)}
-user_warnings = {}         # {user_id: int}
-user_message_times = {}    # {user_id: [timestamps]}
+user_infractions = {}
+user_last_message = {}
+user_warnings = {}
+user_message_times = {}
 
 # ---- SETTINGS ----
 invite_pattern = re.compile(r"(discord\.gg\/|discord\.com\/invite\/)")
@@ -27,27 +27,25 @@ SPAM_MAX_MESSAGES = 5
 
 
 # ---- HELPERS ----
-def get_log_channel(guild: discord.Guild | None):
+def get_log_channel(guild):
     if guild is None:
         return None
     return discord.utils.get(guild.text_channels, name=LOG_CHANNEL_NAME)
 
 
-async def send_temp_msg(channel: discord.TextChannel, content: str, delay: int = 5):
+async def send_temp_msg(channel, content, delay=5):
     try:
         msg = await channel.send(content)
         await asyncio.sleep(delay)
         await msg.delete()
     except Exception:
-        # Never crash the bot over a message or delete error
         pass
 
 
-def add_message_timestamp(user_id: int):
+def add_message_timestamp(user_id):
     now = datetime.utcnow()
     times = user_message_times.get(user_id, [])
     times.append(now)
-    # Keep only recent timestamps
     cutoff = now.timestamp() - SPAM_WINDOW_SECONDS
     times = [t for t in times if t.timestamp() >= cutoff]
     user_message_times[user_id] = times
@@ -67,7 +65,7 @@ async def on_ready():
 
 # ---- MESSAGE HANDLER ----
 @bot.event
-async def on_message(message: discord.Message):
+async def on_message(message):
     if message.author.bot:
         return
 
@@ -76,41 +74,28 @@ async def on_message(message: discord.Message):
     user_id = message.author.id
     content = message.content.lower()
 
-    # ---- ANTI-SPAM (message frequency) ----
+    # ---- ANTI-SPAM ----
     msg_count = add_message_timestamp(user_id)
     if msg_count > SPAM_MAX_MESSAGES:
         user_infractions[user_id] = user_infractions.get(user_id, 0) + 1
-        await send_temp_msg(
-            message.channel,
-            f"{message.author.mention} slow down, you're sending messages too fast.",
-            delay=5,
-        )
+        await send_temp_msg(message.channel, f"{message.author.mention} slow down.", 5)
         if log_channel:
-            await log_channel.send(
-                f"{message.author} flagged for spam. Infractions: {user_infractions[user_id]}"
-            )
+            await log_channel.send(f"{message.author} flagged for spam.")
 
-    # ---- INVITE LINK MODERATION ----
+    # ---- INVITE LINK MOD ----
     if invite_pattern.search(content):
         try:
             await message.delete()
         except Exception:
             pass
 
-        await send_temp_msg(
-            message.channel,
-            f"{message.author.mention} no invite links.",
-            delay=5,
-        )
-
+        await send_temp_msg(message.channel, f"{message.author.mention} no invite links.", 5)
         user_infractions[user_id] = user_infractions.get(user_id, 0) + 1
 
         if log_channel:
-            await log_channel.send(
-                f"{message.author} posted an invite link. Infractions: {user_infractions[user_id]}"
-            )
+            await log_channel.send(f"{message.author} posted an invite link.")
 
-    # ---- REPEATED MESSAGE MODERATION ----
+    # ---- REPEATED MESSAGE ----
     last_msg, repeat_count = user_last_message.get(user_id, ("", 0))
 
     if content == last_msg:
@@ -121,107 +106,131 @@ async def on_message(message: discord.Message):
     user_last_message[user_id] = (content, repeat_count)
 
     if repeat_count == 3:
-        await send_temp_msg(
-            message.channel,
-            f"{message.author.mention} stop repeating the same message.",
-            delay=5,
-        )
+        await send_temp_msg(message.channel, f"{message.author.mention} stop repeating.", 5)
         user_infractions[user_id] = user_infractions.get(user_id, 0) + 1
 
         if log_channel:
-            await log_channel.send(
-                f"{message.author} repeated messages. Infractions: {user_infractions[user_id]}"
-            )# ---- INFRACTION ACTIONS ----
+            await log_channel.send(f"{message.author} repeated messages.")
+
+    # ---- INFRACTION ACTIONS ----
     infractions = user_infractions.get(user_id, 0)
 
-    # Timeout at 2 infractions
+    # Timeout at 2
     if infractions == 2:
         try:
             await message.author.timeout(timedelta(minutes=10))
         except Exception:
             pass
 
-        await send_temp_msg(
-            message.channel,
-            f"{message.author.mention} has been timed out for 10 minutes.",
-            delay=5,
-        )
+        await send_temp_msg(message.channel, f"{message.author.mention} timed out.", 5)
 
         if log_channel:
-            await log_channel.send(f"{message.author} was timed out (2 infractions).")
+            await log_channel.send(f"{message.author} was timed out.")
 
-   # Ban at 3+ infractions
-if infractions >= 3:
-    try:
-         await guild.ban(message.author, reason="Repeated infractions")
-    except Exception:
-        pass
+    # Ban at 3+
+    if infractions >= 3:
+        try:
+            await guild.ban(message.author, reason="Repeated infractions")
+        except Exception:
+            pass
 
-    await send_temp_msg(
-        message.channel,
-        f"{message.author.mention} has been banned for repeated infractions.",
-        delay=5,
-    )
+        await send_temp_msg(message.channel, f"{message.author.mention} banned.", 5)
 
+        if log_channel:
+            await log_channel.send(f"{message.author} was banned.")
+
+    await bot.process_commands(message)
+
+
+# ---- WARNING SYSTEM ----
+def add_warning(user_id):
+    user_warnings[user_id] = user_warnings.get(user_id, 0) + 1
+    return user_warnings[user_id]
+
+
+@bot.command()
+@commands.has_permissions(manage_messages=True)
+async def warn(ctx, member: discord.Member, *, reason="No reason provided"):
+    count = add_warning(member.id)
+    await ctx.send(f"{member.mention} warned. Total warnings: {count}. Reason: {reason}")
+
+    log_channel = get_log_channel(ctx.guild)
     if log_channel:
-        await log_channel.send(f"{message.author} was banned (3+ infractions).")
-@bot.command(name="helpme")
-async def helpme(ctx):
-    """Custom help command."""
+        await log_channel.send(f"{member} warned by {ctx.author}. Reason: {reason}")
+
+
+@bot.command()
+@commands.has_permissions(manage_messages=True)
+async def warnings(ctx, member: discord.Member):
+    count = user_warnings.get(member.id, 0)
+    await ctx.send(f"{member.mention} has {count} warning(s).")
+
+
+@bot.command()
+@commands.has_permissions(manage_messages=True)
+async def clearwarnings(ctx, member: discord.Member):
+    user_warnings[member.id] = 0
+    await ctx.send(f"{member.mention}'s warnings cleared.")
+
+
+# ---- MOD PANEL ----
+@bot.command()
+@commands.has_permissions(manage_guild=True)
+async def modpanel(ctx):
     text = (
-        "**Dollah Bot Commands**\n"
-        "- `!hello` — test if the bot is alive\n"
-        "- `!helpme` — show this help message\n"
-        "- `!modpanel` — show mod tools (mods only)\n"
-        "- `!warn @user [reason]` — warn a user (mods only)\n"
-        "- `!warnings @user` — view warnings (mods only)\n"
-        "- `!clearwarnings @user` — clear warnings (mods only)\n"
-        "- `/ban @user [reason]` — ban via slash command (mods only)\n"
+        "**Mod Panel**\n"
+        "- !warn @user [reason]\n"
+        "- !warnings @user\n"
+        "- !clearwarnings @user\n"
+        "- /ban @user [reason]\n"
     )
     await ctx.send(text)
 
 
-# ---- SLASH /BAN COMMAND ----
+# ---- BASIC COMMANDS ----
+@bot.command()
+@commands.cooldown(1, 5, commands.BucketType.user)
+async def hello(ctx):
+    await ctx.send("Yo, Dollah is here!")
+
+
+@bot.command(name="helpme")
+async def helpme(ctx):
+    text = (
+        "**Dollah Bot Commands**\n"
+        "- !hello\n"
+        "- !helpme\n"
+        "- !modpanel\n"
+        "- !warn @user\n"
+        "- !warnings @user\n"
+        "- !clearwarnings @user\n"
+        "- /ban @user\n"
+    )
+    await ctx.send(text)
+
+
+# ---- SLASH BAN ----
 @bot.tree.command(name="ban", description="Ban a user (mod only).")
 @discord.app_commands.checks.has_permissions(ban_members=True)
-async def ban_slash(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+async def ban_slash(interaction, member: discord.Member, reason: str = "No reason provided"):
     guild = interaction.guild
     log_channel = get_log_channel(guild)
 
     try:
         await guild.ban(member, reason=reason)
         await interaction.response.send_message(
-            f"{member.mention} has been banned. Reason: {reason}", ephemeral=True
+            f"{member.mention} banned. Reason: {reason}", ephemeral=True
         )
         if log_channel:
-            await log_channel.send(
-                f"{member} was banned via /ban by {interaction.user}. Reason: {reason}"
-            )
+            await log_channel.send(f"{member} banned via /ban by {interaction.user}.")
     except Exception:
         await interaction.response.send_message(
             "I couldn't ban that user. Check my permissions.", ephemeral=True
         )
 
 
-@ban_slash.error
-async def ban_slash_error(interaction: discord.Interaction, error):
-    if isinstance(error, discord.app_commands.MissingPermissions):
-        await interaction.response.send_message(
-            "You don't have permission to use this command.", ephemeral=True
-        )
-    else:
-        try:
-            await interaction.response.send_message(
-                "Something went wrong using this command.", ephemeral=True
-            )
-        except Exception:
-            pass
-
-
 # ---- RUN BOT ----
 bot.run(os.environ["DISCORD_BOT_TOKEN"])
-
-
 
 
 
