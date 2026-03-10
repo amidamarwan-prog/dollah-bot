@@ -153,7 +153,7 @@ async def on_message(message: discord.Message):
    # Ban at 3+ infractions
 if infractions >= 3:
     try:
-        await guild.ban(message.author, reason="Repeated infractions")
+         await guild.ban(message.author, reason="Repeated infractions")
     except Exception:
         pass
 
@@ -220,6 +220,7 @@ async def ban_slash_error(interaction: discord.Interaction, error):
 
 # ---- RUN BOT ----
 bot.run(os.environ["DISCORD_BOT_TOKEN"])
+
 
 
 
