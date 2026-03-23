@@ -93,7 +93,26 @@ def is_repeat(message: discord.Message) -> bool:
     return last is not None and last == message.content and len(message.content) > 5
 
 def has_link(message: discord.Message) -> bool:
-    return bool(re.search(r"https?://", message.content))
+    content = message.content.lower()
+
+    # Allow GIFs (Tenor, Giphy, Discord GIFs)
+    if "tenor.com" in content:
+        return False
+    if "giphy.com" in content:
+        return False
+    if content.endswith(".gif"):
+        return False
+
+    # Block Discord invites
+    if "discord.gg/" in content or "discord.com/invite" in content:
+        return True
+
+    # Block other server links
+    if "discord.com/channels" in content:
+        return True
+
+    # Allow everything else
+    return False
 
 # ==========================
 # WARNING SYSTEM
