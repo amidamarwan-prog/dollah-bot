@@ -41,7 +41,6 @@ BASE_SWEARS = {
     "merde", "salope",
     "chuj", "kurwa",
     "pendejo",
-    # Add more anytime
 }
 
 def normalize(text: str) -> str:
@@ -75,8 +74,8 @@ async def log(guild: discord.Guild, message: str):
 # ==========================
 # ANTI-SPAM / ANTI-REPEAT TRACKING
 # ==========================
-recent_messages = {}  # user_id -> timestamps
-last_message_content = {}  # user_id -> last message
+recent_messages = {}
+last_message_content = {}
 
 def is_spam(message: discord.Message) -> bool:
     now = time.time()
@@ -125,7 +124,7 @@ async def warn_and_log(message: discord.Message, reason: str):
 # ==========================
 # ANTI-GHOST PING
 # ==========================
-ghost_cache = {}  # message_id -> (author_id, mentions, guild_id, channel_id)
+ghost_cache = {}
 
 @bot.event
 async def on_message_delete(message: discord.Message):
@@ -166,7 +165,6 @@ async def on_message(message: discord.Message):
     if not message.guild or message.author.bot:
         return
 
-    # Track ghost ping
     if message.mentions:
         ghost_cache[message.id] = (
             message.author.id,
@@ -176,23 +174,19 @@ async def on_message(message: discord.Message):
         )
 
     if is_mod(message.author):
-        return
+        return await bot.process_commands(message)
 
     if contains_swear(message.content):
-        await warn_and_log(message, "Swear detected")
-        return
+        return await warn_and_log(message, "Swear detected")
 
     if has_link(message):
-        await warn_and_log(message, "Link detected")
-        return
+        return await warn_and_log(message, "Link detected")
 
     if is_repeat(message):
-        await warn_and_log(message, "Repeated message")
-        return
+        return await warn_and_log(message, "Repeated message")
 
     if is_spam(message):
-        await warn_and_log(message, "Spam detected")
-        return
+        return await warn_and_log(message, "Spam detected")
 
     await bot.process_commands(message)
 
